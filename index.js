@@ -140,23 +140,47 @@ async function appendToSheet(auth, data) {
   }
 }
 
-// Parse expense message with improved validation
-function parseExpense(message) {
-  // Support formats:
-  // !expense 12.50 food "lunch with team"
-  // !expense 5.99 coffee 2023-05-20
-  const match = message.match(/!expense\s+(\d+\.?\d*)\s+(\S+)\s+(?:["']([^"']+)["']|(\S[^-0-9]+?))(?:\s+(\d{4}-\d{2}-\d{2}))?$/);
+function parseExpense(input) {
+    // Determine if input is a Message object or raw string
+    const content = typeof input === 'string' ? input : input.content;
+    const author = typeof input === 'string' ? 'System' : input.author?.username || 'Unknown';
   
-  if (!match) return null;
-
-  const amount = parseFloat(match[1]);
-  const category = match[2];
-  const description = match[3] || match[4] || 'No description';
-  const date = match[5] || new Date().toISOString().split('T')[0];
-  const user = message.author.username;
-
-  return [date, amount, category, description, user];
-}
+    // Remove command prefix and trim
+    const commandContent = content.replace(/^!expense\s+/i, '').trim();
+    
+    // Split into parts (supporting quoted descriptions)
+    const parts = commandContent.match(/(?:[^\s"']+|["'][^"']*["'])+/g) || [];
+    
+    // Minimum: amount and category
+    if (parts.length < 2) {
+      console.log('Parse failed - insufficient parts');
+      return null;
+    }
+  
+    // Parse amount (remove $ if present)
+    const amount = parseFloat(parts[0].replace('$', ''));
+    if (isNaN(amount)) {
+      console.log('Parse failed - invalid amount');
+      return null;
+    }
+  
+    // Get category (remove quotes if present)
+    const category = parts[1].replace(/["']/g, '');
+  
+    // Handle description and date
+    let description = 'No description';
+    let date = new Date().toISOString().split('T')[0]; // Default today
+  
+    if (parts.length > 2) {
+      // Check if last part is a date (YYYY-MM-DD)
+      if (parts[parts.length-1].match(/^\d{4}-\d{2}-\d{2}$/)) {
+        date = parts.pop(); // Remove date from parts
+      }
+      description = parts.slice(2).join(' ').replace(/["']/g, '');
+    }
+  
+    return [date, amount, category, description, author];
+  }
 
 // Discord bot events
 discordClient.on('ready', async () => {
@@ -171,24 +195,28 @@ discordClient.on('ready', async () => {
 });
 
 discordClient.on('messageCreate', async (message) => {
-    if (message.author.bot) return;
-  
-    if (message.content.startsWith('!expense')) {
-      console.log('\n--- NEW MESSAGE ---');
-      console.log('Raw input:', message.content);
-  
-      const expenseData = parseExpense(message.content);
-      console.log('Parsed data:', expenseData);
-  
-      if (!expenseData) {
-        console.log('Format validation failed');
-        return message.reply('Invalid format. Try: `!expense 5.99 coffee "latte"`');
-      }
+  if (message.author.bot) return;
+
+  if (message.content.startsWith('!expense')) {
+    console.log('\n--- NEW MESSAGE ---');
+    console.log('Full message object:', {
+      content: message.content,
+      author: message.author?.username,
+      channel: message.channel?.name
+    });
+
+    const expenseData = parseExpense(message); // Pass the full message object
+    console.log('Parsed data:', expenseData);
+
+    if (!expenseData) {
+      console.log('Format validation failed');
+      return message.reply('Invalid format. Try: `!expense 5.99 coffee "latte"`');
+    }
   
       try {
         console.log('Attempting Google Auth...');
         const authClient = await authorize();
-        console.log('Auth successful, client email:', authClient._client.email);
+        console.log('Auth successful, client email:', process.env.EMAIL);
   
         console.log('Attempting sheet append...');
         const success = await appendToSheet(authClient, expenseData);
@@ -196,7 +224,9 @@ discordClient.on('messageCreate', async (message) => {
   
         if (success) {
           console.log('Success - sending confirmation');
-          return message.reply(`✅ Logged $${expenseData[1]} for ${expenseData[2]}`);
+          return message.reply(`✅ Logged $${expenseData[1]} for ${expenseData[2]}
+               open your sheet: https://docs.google.com/spreadsheets/d/1ZuyFF3tKiS8FUZyoZo4_E_TXBz7emC5aR5UPgUSKaqM/edit?usp=sharing
+            `);
         } else {
           console.log('Append failed silently');
           return message.reply('❌ Failed silently - check bot logs');
