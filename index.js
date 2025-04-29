@@ -174,48 +174,38 @@ discordClient.on('messageCreate', async (message) => {
     if (message.author.bot) return;
   
     if (message.content.startsWith('!expense')) {
+      console.log('\n--- NEW MESSAGE ---');
+      console.log('Raw input:', message.content);
+  
       const expenseData = parseExpense(message.content);
-      
+      console.log('Parsed data:', expenseData);
+  
       if (!expenseData) {
-        return message.reply('Invalid format. Use: `!expense [amount] [category] ["description"] [date?]`\nExample: `!expense 15.99 food "team lunch" 2023-05-20`');
+        console.log('Format validation failed');
+        return message.reply('Invalid format. Try: `!expense 5.99 coffee "latte"`');
       }
-      
+  
       try {
+        console.log('Attempting Google Auth...');
         const authClient = await authorize();
+        console.log('Auth successful, client email:', authClient._client.email);
+  
+        console.log('Attempting sheet append...');
         const success = await appendToSheet(authClient, expenseData);
-        
+        console.log('Append result:', success);
+  
         if (success) {
-          message.reply(`✅ Expense logged: $${expenseData[1]} for ${expenseData[2]}`);
+          console.log('Success - sending confirmation');
+          return message.reply(`✅ Logged $${expenseData[1]} for ${expenseData[2]}`);
         } else {
-          message.reply('❌ Failed to log expense. Please try again.');
+          console.log('Append failed silently');
+          return message.reply('❌ Failed silently - check bot logs');
         }
       } catch (error) {
-        console.error('Error:', error);
-        message.reply('❌ An error occurred while logging your expense.');
+        console.error('FULL ERROR:', error);
+        return message.reply('🔥 CRASHED: ' + error.message);
       }
     }
-    
-    // Help command
-    if (message.content === '!expensehelp') {
-        message.reply({
-          embeds: [{
-            color: 0x0099ff,
-            title: 'Expense Tracker Bot Help',
-            fields: [
-              {
-                name: 'Log an expense',
-                value: '`!expense [amount] [category] ["description"] [date?]`\nExample: `!expense 15.99 food "team lunch"`\nExample with date: `!expense 24.50 transport Uber 2023-05-15`'
-              },
-              {
-                name: 'Notes',
-                value: '- Dates are optional (defaults to today)\n- Use quotes for multi-word descriptions\n- View your expenses in the Google Sheet'
-              }
-            ],
-            timestamp: new Date()
-          }]
-        });
-      }
-});
-
+  });
 // Start the bot
 discordClient.login(process.env.DISCORD_TOKEN);
