@@ -4,12 +4,20 @@ const { google } = require('googleapis');
 const path = require('path');
 
 const http = require('http');
-http.createServer((req, res) => {
-    if(req.url== '/health-check'){
-        res.writeHead(200, {'Content-Type': 'text/plain'});
-        res.end('bot is alive\n');
-    }
-}).listen(8080);
+const server = http.createServer((req, res) => {
+  if (req.url === '/health-check') {
+    res.writeHead(200, {'Content-Type': 'text/plain'});
+    res.end('Bot is alive\n');
+  } else {
+    res.writeHead(404);
+    res.end();
+  }
+});
+
+// Use Render's provided port
+server.listen(process.env.PORT || 3000, () => {
+  console.log(`Health check server running on port ${process.env.PORT || 3000}`);
+});
 
 // Initialize Discord client
 const discordClient = new Client({
