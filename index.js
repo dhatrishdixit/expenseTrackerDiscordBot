@@ -3,6 +3,9 @@ const { Client, GatewayIntentBits } = require('discord.js');
 const { google } = require('googleapis');
 const path = require('path');
 
+const http = require('http');
+http.createServer((req, res) => res.end('Bot is alive!')).listen(8080);
+
 // Initialize Discord client
 const discordClient = new Client({
   intents: [
